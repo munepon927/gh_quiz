@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Grasshopper 基礎コンポーネント クイズ（画像＋成績記録）</title>
+<style>
+  :root {
+    --bg: #0b1020;
+    --card: #12182b;
+    --ink: #e9eef9;
+    --muted: #a9b3c9;
+    --accent: #4aa8ff;
+    --accent-2: #82e0aa;
+    --wrong: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Inter", "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, "Noto Sans JP", sans-serif;
+  }
+  header {
+    padding: 20px 16px; border-bottom: 1px solid #223; position: sticky; top: 0; background: rgba(11,16,32,.85); backdrop-filter: blur(6px);
+  }
+  header h1 { margin: 0 0 6px; font-size: 20px; font-weight: 700; }
+  header .sub { color: var(--muted); font-size: 12px; }
+
+  .wrap {
+    max-width: 1024px; margin: 0 auto; padding: 24px 16px; display: grid; grid-template-columns: 1fr 320px; gap: 16px;
+  }
+  @media (max-width: 900px){ .wrap { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--card); border: 1px solid #1b2238; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.25);
+  }
+  .quiz {
+    padding: 20px;
+  }
+  .q-head { display:flex; align-items:center; gap: 10px; margin-bottom: 12px; }
+  .pill {
+    font-size: 12px; color: var(--ink); background: #1a2240; border: 1px solid #2a3560; padding: 4px 10px; border-radius: 999px;
+  }
+  .q-title { font-size: 20px; margin: 0; }
+  .q-img {
+    width: 280px; max-width: 90%; border-radius: 12px; border: 1px solid #243054; background: #0f1530; padding: 8px; margin: 12px auto 18px; display: block;
+  }
+  .choices { display: grid; gap: 10px; margin-top: 10px; }
+  .choice {
+    text-align: left; background: #0f1530; border: 1px solid #223159; color: var(--ink);
+    border-radius: 12px; padding: 14px; cursor: pointer; transition: transform .05s ease, border-color .2s ease;
+  }
+  .choice:hover { transform: translateY(-1px); border-color: #335; }
+  .choice.correct { border-color: var(--accent-2); box-shadow: inset 0 0 0 1px var(--accent-2); }
+  .choice.wrong { border-color: var(--wrong); box-shadow: inset 0 0 0 1px var(--wrong); }
+  .explain { margin-top: 12px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+  .controls { display:flex; gap:10px; margin-top: 16px; }
+  .btn {
+    background: var(--accent); color:#00122b; border: none; border-radius: 10px; padding: 10px 14px; font-weight: 700; cursor: pointer;
+  }
+  .btn.secondary { background: #1a2240; color: var(--ink); border:1px solid #2a3560; }
+  .btn:disabled { opacity:.5; cursor:not-allowed; }
+
+  .score {
+    padding: 16px;
+  }
+  .score h3 { margin: 0 0 8px; font-size: 16px; }
+  .kpi {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;
+  }
+  .kpi .box {
+    background:#0f1530; border:1px solid #1e2b4d; padding: 12px; border-radius: 12px;
+  }
+  .kpi .big { font-size: 28px; font-weight: 800; }
+  .bar {
+    width: 100%; height: 8px; border-radius: 999px; background: #101831; overflow: hidden; border:1px solid #1f2a4b;
+  }
+  .bar > div {
+    height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 100%);
+    transition: width .5s ease;
+  }
+  table {
+    width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px;
+  }
+  th, td { padding: 8px; border-bottom: 1px solid #1d2744; text-align: left; }
+  th { color: var(--muted); font-weight: 600; }
+  .mini-pill { font-size: 11px; color: #0b1020; background: var(--accent-2); padding: 2px 8px; border-radius: 999px; }
+
+  .footer-note { color: var(--muted); font-size: 12px; padding: 10px 16px 20px; text-align: center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🧩 Grasshopper 基礎コンポーネント クイズ</h1>
+  <div class="sub">画像付き・正解率記録（ローカル保存）・選択肢ランダム</div>
+</header>
+
+<div class="wrap">
+  <!-- Quiz Column -->
+  <section id="quizCard" class="card quiz" aria-live="polite">
+    <div class="q-head">
+      <span class="pill" id="progressPill">Q 1 / 10</span>
+      <span class="pill" id="topicPill">—</span>
+    </div>
+    <h2 id="qTitle" class="q-title">読み込み中…</h2>
+    <img id="qImg" class="q-img" alt="Component image" src="" onerror="this.style.display='none';" />
+    <div id="choices" class="choices"></div>
+    <div id="explain" class="explain"></div>
+    <div class="controls">
+      <button id="nextBtn" class="btn" disabled>次の問題へ</button>
+      <button id="skipBtn" class="btn secondary">スキップ</button>
+    </div>
+  </section>
+
+  <!-- Score/Stats Column -->
+  <aside class="card score">
+    <h3>📊 成績ダッシュボード</h3>
+    <div class="kpi">
+      <div class="box">
+        <div>今回の正解率</div>
+        <div id="sessionAcc" class="big">—</div>
+        <div class="bar"><div id="sessionBar"></div></div>
+      </div>
+      <div class="box">
+        <div>累積の正解率</div>
+        <div id="globalAcc" class="big">—</div>
+        <div class="bar"><div id="globalBar"></div></div>
+      </div>
+    </div>
+    <table id="perItem">
+      <thead><tr><th>コンポーネント</th><th>正解 / 試行</th><th>率</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div style="display:flex; gap:8px; margin-top:10px;">
+      <button id="resetSession" class="btn secondary" title="このプレイの記録をリセット">今回の記録をリセット</button>
+      <button id="resetGlobal" class="btn secondary" title="累積（localStorage）の記録をリセット">累積の記録をリセット</button>
+    </div>
+  </aside>
+</div>
+
+<p class="footer-note">画像が表示されない場合は <code>assets/</code> にPNGを配置し、ファイル名を <code>questions</code> の <code>img</code> に合わせてください。</p>
+
+<script>
+/** ========= データ定義 ========= **/
+const questions = [
+  {
+    id: "Rectangle",
+    title: "Rectangle コンポーネントの機能は？",
+    img: "assets/rectangle.png",
+    correct: "長方形を作成（平面・幅・高さから矩形カーブ）",
+    choices: [
+      "数値範囲から連続リストを作成",
+      "長方形を作成（平面・幅・高さから矩形カーブ）",
+      "数値を別範囲へ線形変換",
+      "ジオメトリをベクトル分だけ移動"
+    ],
+    explain: "Rectangle は基準平面・幅・高さなどを入力し、矩形カーブ（場合によっては面生成に利用）を作ります。"
+  },
+  {
+    id: "Range",
+    title: "Range コンポーネントの主用途は？",
+    img: "assets/range.png",
+    correct: "数値範囲から連続リストを作成",
+    choices: [
+      "数値範囲から連続リストを作成",
+      "長方形の面積を計算",
+      "リストを昇順にソート",
+      "曲線を等分割して点を出力"
+    ],
+    explain: "Range は開始・終了・分割数から一定間隔の数値リストを出力します（既定は 0→1 の範囲）。"
+  },
+  {
+    id: "RemapNumbers",
+    title: "Remap Numbers の機能は？",
+    img: "assets/remap_numbers.png",
+    correct: "数値を別範囲へ線形変換",
+    choices: [
+      "数値を別範囲へ線形変換",
+      "ジオメトリの型を変換",
+      "矩形を回転",
+      "曲線長を求める"
+    ],
+    explain: "入力ドメイン（最小〜最大）から出力ドメインへ数値を比例変換します。"
+  },
+  {
+    id: "ConstructDomain",
+    title: "Construct Domain の用途は？",
+    img: "assets/construct_domain.png",
+    correct: "最小値と最大値からドメイン型を生成",
+    choices: [
+      "最小値と最大値からドメイン型を生成",
+      "値を正規化（0〜1）",
+      "曲線の接線ベクトルを取得",
+      "ベクトルを正規化"
+    ],
+    explain: "Min / Max を与え Domain（範囲）を作ります。Remap 等の入力に使います。"
+  },
+  {
+    id: "Bounds",
+    title: "Bounds は何を返す？",
+    img: "assets/bounds.png",
+    correct: "入力リストの最小値・最大値（ドメイン）",
+    choices: [
+      "入力リストの最小値・最大値（ドメイン）",
+      "曲線のコントロールポイント列",
+      "平面の法線ベクトル",
+      "数値の中央値"
+    ],
+    explain: "数値リストの min/max を測り、その範囲をドメインとして返します。"
+  },
+  {
+    id: "DivideCurve",
+    title: "Divide Curve の機能は？",
+    img: "assets/divide_curve.png",
+    correct: "曲線を等分割して分割点を出力",
+    choices: [
+      "曲線を等分割して分割点を出力",
+      "曲線を回転",
+      "面を生成",
+      "曲率プロットを生成"
+    ],
+    explain: "指定分割数で曲線を割り、各位置のポイント（必要に応じて接線等）を得られます。"
+  },
+  {
+    id: "Area",
+    title: "Area コンポーネントの出力は？",
+    img: "assets/area.png",
+    correct: "面積と重心（Centroid）",
+    choices: [
+      "面積と重心（Centroid）",
+      "曲線長",
+      "矩形の幅と高さ",
+      "法線ベクトル"
+    ],
+    explain: "入力した平面カーブやサーフェスの面積と重心点を返します。"
+  },
+  {
+    id: "EvaluateCurve",
+    title: "Evaluate Curve の役割は？",
+    img: "assets/evaluate_curve.png",
+    correct: "曲線上の任意位置を評価（点/接線/法線）",
+    choices: [
+      "曲線上の任意位置を評価（点/接線/法線）",
+      "曲線を閉じる",
+      "曲線を分割",
+      "曲線を押し出す"
+    ],
+    explain: "パラメータ（t値）で曲線上の点・接線ベクトルなどを取得できます。"
+  },
+  {
+    id: "Move",
+    title: "Move コンポーネントの機能は？",
+    img: "assets/move.png",
+    correct: "ジオメトリをベクトル分だけ移動",
+    choices: [
+      "ジオメトリをベクトル分だけ移動",
+      "平面を生成",
+      "値を昇順に並べる",
+      "法線ベクトルを計算"
+    ],
+    explain: "入力ジオメトリを指定ベクトルだけ平行移動します。"
+  },
+  {
+    id: "Scale",
+    title: "Scale コンポーネントの役割は？",
+    img: "assets/scale.png",
+    correct: "ジオメトリを基点から拡縮",
+    choices: [
+      "ジオメトリを基点から拡縮",
+      "ドメインを再構築",
+      "面積を計算",
+      "テキストを出力"
+    ],
+    explain: "指定スケール係数でジオメトリを拡大・縮小します（基点に注意）。"
+  }
+];
+
+/** ========= ユーティリティ ========= **/
+const shuffle = (arr) => {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+};
+
+const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+const pctTxt = (n) => (isNaN(n) ? "—" : `${(n*100).toFixed(0)}%`);
+
+/** ========= 設定 ========= **/
+const QUESTIONS_PER_SESSION = 10; // 出題数（変更可）
+const STORAGE_KEY = "gh_quiz_stats_v1";
+
+/** ========= 成績記録（localStorage） ========= **/
+function loadStats() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return { total: { correct:0, trials:0 }, perItem:{} };
+  try { return JSON.parse(raw); } catch { return { total:{correct:0,trials:0}, perItem:{} }; }
+}
+function saveStats(stats) { localStorage.setItem(STORAGE_KEY, JSON.stringify(stats)); }
+function bump(stats, id, isCorrect) {
+  // 全体
+  stats.total.trials += 1;
+  if (isCorrect) stats.total.correct += 1;
+  // 個別
+  if (!stats.perItem[id]) stats.perItem[id] = { correct:0, trials:0 };
+  stats.perItem[id].trials += 1;
+  if (isCorrect) stats.perItem[id].correct += 1;
+  saveStats(stats);
+}
+
+/** ========= セッション状態 ========= **/
+let deck = shuffle(questions).slice(0, QUESTIONS_PER_SESSION);
+let step = 0;
+let session = { correct: 0, trials: 0 };
+let stats = loadStats();
+let locked = false;
+
+/** ========= DOM 取得 ========= **/
+const progressPill = document.getElementById("progressPill");
+const topicPill = document.getElementById("topicPill");
+const qTitle = document.getElementById("qTitle");
+const qImg = document.getElementById("qImg");
+const choicesBox = document.getElementById("choices");
+const explainBox = document.getElementById("explain");
+const nextBtn = document.getElementById("nextBtn");
+const skipBtn = document.getElementById("skipBtn");
+const sessionAcc = document.getElementById("sessionAcc");
+const sessionBar = document.getElementById("sessionBar");
+const globalAcc = document.getElementById("globalAcc");
+const globalBar = document.getElementById("globalBar");
+const perItemTbody = document.querySelector("#perItem tbody");
+const resetSession = document.getElementById("resetSession");
+const resetGlobal = document.getElementById("resetGlobal");
+
+/** ========= 画面更新 ========= **/
+function updateKPI() {
+  const sAcc = session.trials ? session.correct / session.trials : NaN;
+  const gAcc = stats.total.trials ? stats.total.correct / stats.total.trials : NaN;
+  sessionAcc.textContent = pctTxt(sAcc);
+  globalAcc.textContent  = pctTxt(gAcc);
+  sessionBar.style.width = `${clamp((sAcc||0), 0, 1)*100}%`;
+  globalBar.style.width  = `${clamp((gAcc||0), 0, 1)*100}%`;
+
+  // 個別テーブル
+  perItemTbody.innerHTML = "";
+  questions.forEach(q => {
+    const r = stats.perItem[q.id] || {correct:0,trials:0};
+    const row = document.createElement("tr");
+    const acc = r.trials ? (r.correct / r.trials) : NaN;
+    row.innerHTML = `
+      <td>${q.id}</td>
+      <td>${r.correct} / ${r.trials}</td>
+      <td>${r.trials ? `<span class="mini-pill">${(acc*100).toFixed(0)}%</span>` : "—"}</td>
+    `;
+    perItemTbody.appendChild(row);
+  });
+}
+
+function render() {
+  updateKPI();
+  const q = deck[step];
+  if (!q) {
+    qTitle.textContent = "✅ 終了！おつかれさま。";
+    qImg.style.display = "none";
+    choicesBox.innerHTML = "";
+    explainBox.textContent = `今回の成績：${session.correct} / ${session.trials}（${pctTxt(session.correct/session.trials)}）`;
+    nextBtn.disabled = true;
+    skipBtn.disabled = true;
+    progressPill.textContent = `完了`;
+    topicPill.textContent = `全 ${deck.length} 問`;
+    return;
+  }
+
+  progressPill.textContent = `Q ${step+1} / ${deck.length}`;
+  topicPill.textContent = q.id;
+
+  qTitle.textContent = q.title;
+  if (q.img) {
+    qImg.src = q.img;
+    qImg.style.display = "block";
+  } else {
+    qImg.style.display = "none";
+  }
+
+  // 選択肢（正解位置ランダム）
+  const randomized = shuffle(q.choices);
+  choicesBox.innerHTML = "";
+  explainBox.textContent = "";
+  nextBtn.disabled = true;
+  locked = false;
+
+  randomized.forEach(text => {
+    const node = document.createElement("button");
+    node.className = "choice";
+    node.type = "button";
+    node.textContent = text;
+    node.addEventListener("click", () => onAnswer(q, text, node));
+    choicesBox.appendChild(node);
+  });
+}
+
+function onAnswer(q, selectedText, node) {
+  if (locked) return;
+  locked = true;
+
+  const isCorrect = (selectedText === q.correct);
+  session.trials += 1;
+  if (isCorrect) session.correct += 1;
+  bump(stats, q.id, isCorrect); // 累積記録
+
+  // 見た目
+  const choiceNodes = [...document.querySelectorAll(".choice")];
+  choiceNodes.forEach(n => {
+    if (n.textContent === q.correct) n.classList.add("correct");
+    if (n === node && !isCorrect) n.classList.add("wrong");
+    n.disabled = true;
+  });
+
+  // 解説
+  explainBox.innerHTML = (isCorrect ? "✅ 正解！" : `❌ 不正解。正解：「${q.correct}」`) + "<br>" + q.explain;
+
+  nextBtn.disabled = false;
+  updateKPI();
+}
+
+nextBtn.addEventListener("click", () => {
+  step += 1;
+  render();
+});
+
+skipBtn.addEventListener("click", () => {
+  // スキップも試行としてカウント（正解ではない）
+  const q = deck[step];
+  session.trials += 1;
+  bump(stats, q.id, false);
+  step += 1;
+  render();
+});
+
+resetSession.addEventListener("click", () => {
+  session = { correct: 0, trials: 0 };
+  updateKPI();
+});
+
+resetGlobal.addEventListener("click", () => {
+  stats = { total: {correct:0, trials:0}, perItem: {} };
+  saveStats(stats);
+  updateKPI();
+});
+
+// 初期描画
+render();
+
+</script>
+</body>
+</html>
